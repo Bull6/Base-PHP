@@ -1,0 +1,39 @@
+ARG PHP_VERSION=8.2.4
+
+ARG REPO_PROXY="https://repos.dp.nlmk.com/artifactory/alpine-remote2"
+
+FROM php:${PHP_VERSION}-fpm-alpine
+
+RUN apk --update --no-cache add linux-headers git bash tzdata msmtp \
+  && set -ex \
+  && apk --no-cache add libxml2-dev libpng libpng-dev libjpeg libwebp-dev libjpeg-turbo-dev libzip-dev freetype-dev \
+  && docker-php-ext-configure gd --with-jpeg --with-freetype --with-jpeg --with-webp \
+  && docker-php-ext-install mysqli soap sockets gd zip \
+  && apk --no-cache add g++ make autoconf \
+  && docker-php-source extract
+
+# xdebug
+ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
+
+RUN chmod +x /usr/local/bin/install-php-extensions && sync && \
+    install-php-extensions amqp json mbstring mysqlnd opcache pdo xml xmlrpc ldap apcu memcache odbc curl soap snmp zip gettext bcmath #pear process cgi common
+
+# yaml
+RUN apk add --update yaml yaml-dev \
+    && pecl install yaml && docker-php-ext-enable yaml
+
+# ldap
+RUN apk add --update --no-cache \
+                libldap && \
+            # Build dependancy for ldap \
+            apk add --update --no-cache --virtual .docker-php-ldap-dependencies \
+                openldap-dev && \
+            docker-php-ext-configure ldap && \
+            docker-php-ext-install ldap && \
+            apk del .docker-php-ldap-dependencies
+
+COPY --from=composer /usr/bin/composer /usr/bin/composer
+
+WORKDIR /var/www/html
+
+EXPOSE 9000
